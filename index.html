@@ -143,13 +143,14 @@
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
 </head>
 <body>
 
     <div class="hud-top-left">
         <div class="panel">
             <div class="level-title" id="levelText">BÖLÜM 1 / 5</div>
-            <div class="sub-info" id="hintText">Model yükleniyor...</div>
+            <div class="sub-info" id="hintText">Tofaş modeli yükleniyor...</div>
         </div>
         <div class="top-btns">
             <button class="btn-ui" id="btnSound" onclick="toggleSound()">Ses: Açık</button>
@@ -217,7 +218,6 @@
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 audioCtx = new AudioContext();
 
-                // Motor Osilatörleri
                 engineOsc1 = audioCtx.createOscillator();
                 engineOsc2 = audioCtx.createOscillator();
                 subBassOsc = audioCtx.createOscillator();
@@ -253,7 +253,6 @@
                 subBassOsc.start();
                 lfoOsc.start();
 
-                // Lastik Cıyaklama / Kayma Sesi (Bandpass Beyaz Gürültü)
                 const bufferSize = audioCtx.sampleRate * 2;
                 const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
                 const output = noiseBuffer.getChannelData(0);
@@ -298,7 +297,6 @@
             lfoGain.gain.setTargetAtTime(rpmRatio > 0.25 ? 1.5 : 5.5, audioCtx.currentTime, 0.1);
             engineGain.gain.setTargetAtTime(0.13 + rpmRatio * 0.12, audioCtx.currentTime, 0.06);
 
-            // Lastik kayma sesi
             const tireVol = Math.min(0.16, slipIntensity * 0.18);
             tireGain.gain.setTargetAtTime(tireVol, audioCtx.currentTime, 0.05);
             tireFilter.frequency.setTargetAtTime(1200 + slipIntensity * 500, audioCtx.currentTime, 0.05);
@@ -339,11 +337,12 @@
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.outputEncoding = THREE.sRGBEncoding;
 
-        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x334155, 0.9);
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x334155, 1.0);
         scene.add(hemiLight);
 
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1.1);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
         dirLight.position.set(25, 42, 25);
         dirLight.castShadow = true;
         dirLight.shadow.mapSize.width = 1024;
@@ -355,7 +354,7 @@
         dirLight.shadow.camera.bottom = -d;
         scene.add(dirLight);
 
-        // Geniş Asfalt Drift & Park Alanı
+        // Asfalt Zemin
         const ground = new THREE.Mesh(
             new THREE.PlaneGeometry(160, 160),
             new THREE.MeshStandardMaterial({ color: 0x242529, roughness: 0.85 })
@@ -368,7 +367,7 @@
         gridHelper.position.y = 0.01;
         scene.add(gridHelper);
 
-        // --- LASTİK İZLERİ VE EGZOZ/LASTİK DUMANI EFEKTLERİ ---
+        // --- LASTİK İZLERİ VE DUMAN EFEKTLERİ ---
         const skidMarks = [];
         const skidMat = new THREE.MeshBasicMaterial({ color: 0x09090b, transparent: true, opacity: 0.65, side: THREE.DoubleSide });
         const skidGeo = new THREE.PlaneGeometry(0.24, 0.45);
@@ -396,14 +395,16 @@
             smokeParticles.push({ mesh: p, life: 1.0 });
         }
 
-        // --- GERÇEK 3D MODEL YÜKLEYİCİ (tofas.glb & trafik.glb) ---
+        // --- GERÇEK 3D MODEL YÜKLEYİCİ (tofas/scene.gltf) ---
         const carGroup = new THREE.Group();
         scene.add(carGroup);
 
         let externalTrafficTemplate = null;
         const gltfLoader = new THREE.GLTFLoader();
+        const dracoLoader = new THREE.DRACOLoader();
+        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.4.1/');
+        gltfLoader.setDRACOLoader(dracoLoader);
 
-        // Otomatik Ölçekleme ve Ortalama Yardımcı Fonksiyonu
         function normalizeModel(model, targetLength = 4.3) {
             const box = new THREE.Box3().setFromObject(model);
             const size = new THREE.Vector3();
@@ -413,7 +414,6 @@
             const scale = targetLength / maxDim;
             model.scale.setScalar(scale);
 
-            // Ölçek sonrası tekrar kutu hesapla ve zemine oturt
             const scaledBox = new THREE.Box3().setFromObject(model);
             const center = new THREE.Vector3();
             scaledBox.getCenter(center);
@@ -431,7 +431,6 @@
             return model;
         }
 
-        // Yedek Tofaş Modeli (tofas.glb henüz yüklenmediyse devreye girer)
         function buildFallbackTofas() {
             const fallback = new THREE.Group();
             const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.2 });
@@ -462,26 +461,24 @@
         let fallbackMesh = buildFallbackTofas();
         carGroup.add(fallbackMesh);
 
-        // GitHub'daki tofas.glb dosyasını yüklemeyi dene
+        // GitHub'daki tofas/scene.gltf dosyasını yükle
         gltfLoader.load(
-            'tofas.glb',
+            'tofas/scene.gltf',
             (gltf) => {
                 carGroup.remove(fallbackMesh);
                 const tofasModel = normalizeModel(gltf.scene, 4.3);
-                // Eğer model ters yöne bakıyorsa burada Math.PI eklenebilir
                 carGroup.add(tofasModel);
                 document.getElementById('hintText').innerText = levels[currentLevel].hint;
             },
             undefined,
             () => {
-                // tofas.glb henüz atılmamışsa yedek modelle devam et
-                document.getElementById('hintText').innerText = levels[currentLevel].hint + " (tofas.glb bekleniyor)";
+                document.getElementById('hintText').innerText = levels[currentLevel].hint + " (tofas/scene.gltf bekleniyor)";
             }
         );
 
-        // Opsiyonel trafik.glb dosyasını yüklemeyi dene
+        // Opsiyonel trafik aracı modeli
         gltfLoader.load(
-            'trafik.glb',
+            'trafik/scene.gltf',
             (gltf) => {
                 externalTrafficTemplate = normalizeModel(gltf.scene, 4.4);
                 loadLevel(currentLevel);
@@ -638,9 +635,9 @@
         let currentLevel = 0;
         let carState = {
             x: 0, z: 0,
-            vx: 0, vz: 0,       // Dünya koordinatında gerçek hız vektörü (kayma için!)
-            rot: 0,            // Aracın baktığı yön
-            angularVel: 0,     // Aracın kendi ekseninde dönme hızı (kıç atma)
+            vx: 0, vz: 0,
+            rot: 0,
+            angularVel: 0,
             steer: 0,
             rpm: 900
         };
@@ -776,13 +773,12 @@
         const driftBadge = document.getElementById('driftBadge');
 
         function updateDashboard(speedMetersPerSec, rpm, isDrifting) {
-            const kmh = Math.round(speedMetersPerSec * 7.2); // Gerçekçi kadran ölçeği
+            const kmh = Math.round(speedMetersPerSec * 7.2);
             speedText.innerText = kmh;
 
             const rpmThousands = (rpm / 1000).toFixed(1);
             rpmText.innerText = rpmThousands;
 
-            // SVG Yay uzunluğu (Max 188 birim)
             const ratio = Math.min(Math.max((rpm - 800) / 6200, 0), 1);
             rpmArc.style.strokeDasharray = `${ratio * 188} 360`;
             rpmArc.style.stroke = rpm > 5600 ? '#ef4444' : (rpm > 4000 ? '#f59e0b' : '#38bdf8');
@@ -797,7 +793,6 @@
             requestAnimationFrame(animate);
             const dt = Math.min(clock.getDelta(), 0.05);
 
-            // Duman parçacıklarını güncelle
             for (let i = smokeParticles.length - 1; i >= 0; i--) {
                 const p = smokeParticles[i];
                 p.life -= dt * 1.6;
@@ -811,23 +806,19 @@
             }
 
             if (!isGamePaused) {
-                // 1. Direksiyon Açısı
                 const maxSteer = 0.58;
                 if (inputs.left) carState.steer = Math.min(carState.steer + 3.2 * dt, maxSteer);
                 else if (inputs.right) carState.steer = Math.max(carState.steer - 3.2 * dt, -maxSteer);
                 else carState.steer *= 0.82;
 
-                // 2. Aracın Yön Vektörleri (İleri ve Sağ/Yan)
                 const forwardX = Math.sin(carState.rot);
                 const forwardZ = Math.cos(carState.rot);
                 const rightX = Math.cos(carState.rot);
                 const rightZ = -Math.sin(carState.rot);
 
-                // Mevcut hızı ileri ve yanal (kayma) bileşenlerine ayır
                 let forwardSpeed = carState.vx * forwardX + carState.vz * forwardZ;
                 let lateralSpeed = carState.vx * rightX + carState.vz * rightZ;
 
-                // 3. Gaz, Fren ve El Freni Kuvvetleri
                 const enginePower = gear === 1 ? 15.5 : 8.5;
                 const maxSpeed = gear === 1 ? 17.5 : 7.5;
 
@@ -836,40 +827,33 @@
                     if (gear === 1 && forwardSpeed > maxSpeed) forwardSpeed = maxSpeed;
                     if (gear === -1 && forwardSpeed < -maxSpeed) forwardSpeed = -maxSpeed;
                 } else {
-                    forwardSpeed *= (1 - 0.85 * dt); // Motor freni / yuvarlanma direnci
+                    forwardSpeed *= (1 - 0.85 * dt);
                 }
 
-                // Normal Fren (Direkt durmaz, kızaklayarak/kayarak yavaşlar)
                 if (inputs.brake) {
                     forwardSpeed *= (1 - 3.6 * dt);
                 }
 
-                // El Freni (Arka tekerleri kilitler, sert yanlama başlatır)
                 if (inputs.handbrake) {
                     forwardSpeed *= (1 - 2.4 * dt);
                 }
 
                 if (Math.abs(forwardSpeed) < 0.04 && !inputs.gas) forwardSpeed = 0;
 
-                // 4. Arkadan İtiş (RWD) Yanal Tutuş ve Drift Fiziği
-                // El freni çekiliyse veya hızlıyken tam gaz direksiyon kırılıyorsa arka tutuş düşer!
                 const isPowerSliding = inputs.gas && Math.abs(forwardSpeed) > 6.5 && Math.abs(carState.steer) > 0.25;
                 const isBrakingHard = inputs.brake && Math.abs(forwardSpeed) > 7.5 && Math.abs(carState.steer) > 0.2;
 
-                let lateralGrip = 6.8; // Normal asfalt tutuşu
-                if (inputs.handbrake) lateralGrip = 1.45; // El freninde buz gibi kayar
-                else if (isPowerSliding) lateralGrip = 2.1; // Gazla yanlama (Power oversteer)
-                else if (isBrakingHard) lateralGrip = 2.6; // Frenle kayma
+                let lateralGrip = 6.8;
+                if (inputs.handbrake) lateralGrip = 1.45;
+                else if (isPowerSliding) lateralGrip = 2.1;
+                else if (isBrakingHard) lateralGrip = 2.6;
 
-                // Yanal hızı tutuş katsayısına göre sönümle (Düşük tutuş = uzun süre yanlama)
                 lateralSpeed *= Math.exp(-lateralGrip * dt);
 
-                // 5. Dönüş ve Kıç Atma (Yaw Rate)
                 const speedFactor = Math.min(Math.abs(forwardSpeed) / 3.5, 1.2);
                 const dirSign = forwardSpeed >= -0.05 ? 1 : -1;
                 let targetTurnRate = carState.steer * 2.45 * speedFactor * dirSign;
 
-                // El freni veya gazla yanlarken arka taraf ekstra savrulur
                 if (inputs.handbrake && Math.abs(forwardSpeed) > 2.5) {
                     targetTurnRate *= 1.55;
                 } else if (isPowerSliding) {
@@ -879,7 +863,6 @@
                 carState.angularVel += (targetTurnRate - carState.angularVel) * Math.min(1, 10 * dt);
                 carState.rot += carState.angularVel * dt;
 
-                // Yeni yön vektörleriyle dünya hızını tekrar birleştir
                 const newFwdX = Math.sin(carState.rot);
                 const newFwdZ = Math.cos(carState.rot);
                 const newRightX = Math.cos(carState.rot);
@@ -891,7 +874,6 @@
                 carState.x += carState.vx * dt;
                 carState.z += carState.vz * dt;
 
-                // 6. Kayma Şiddeti, Lastik İzi ve Duman
                 const totalSpeed = Math.hypot(carState.vx, carState.vz);
                 const slipIntensity = Math.min(1, (Math.abs(lateralSpeed) / 4.2) + (inputs.handbrake && totalSpeed > 2 ? 0.5 : 0));
                 const isDrifting = slipIntensity > 0.35 && totalSpeed > 2.5;
@@ -900,7 +882,6 @@
                     skidTimer += dt;
                     if (skidTimer > 0.035) {
                         skidTimer = 0;
-                        // Arka sol ve arka sağ tekerlek koordinatları
                         const rearCenterX = carState.x - newFwdX * 1.35;
                         const rearCenterZ = carState.z - newFwdZ * 1.35;
                         const rlX = rearCenterX - newRightX * 0.85;
@@ -915,7 +896,6 @@
                     }
                 }
 
-                // 7. Motor Devri (RPM) Hesaplama (Yanlarken kesiciye yaklaşır)
                 const wheelRpm = 900 + (Math.abs(forwardSpeed) / maxSpeed) * 5200;
                 const slipBonusRpm = isDrifting && inputs.gas ? 1100 : 0;
                 const gasRev = inputs.gas ? Math.max(wheelRpm + slipBonusRpm, 2600) : wheelRpm;
@@ -926,18 +906,15 @@
                 updateAudio(rpmRatio, isDrifting ? slipIntensity : 0);
                 updateDashboard(totalSpeed, carState.rpm, isDrifting);
 
-                // 3D Aracı Konumlandır (Yanlarken hafif gövde yatması / body roll ekli!)
                 carGroup.position.set(carState.x, 0, carState.z);
                 carGroup.rotation.y = carState.rot;
                 carGroup.rotation.z = Math.max(-0.07, Math.min(0.07, -lateralSpeed * 0.015));
 
-                // Çarpışma Kontrolü
                 if (checkCollisions()) {
                     playCrashSound();
                     showModal("ÇARPTIN!", "Tofaş'ı vurmadan tekrar dene.", "Tekrar Dene", "RETRY");
                 }
 
-                // Park Kontrolü
                 const lvl = levels[currentLevel];
                 const dist = Math.hypot(carState.x - lvl.target.x, carState.z - lvl.target.z);
                 let angleDiff = Math.abs((carState.rot - lvl.target.rot) % (Math.PI * 2));
@@ -967,7 +944,6 @@
                 updateAudio(0, 0);
             }
 
-            // Kamera Takibi
             if (cameraMode === 0) {
                 const offsetDist = gear === 1 ? -7.8 : 7.8;
                 const targetCamX = carState.x + Math.sin(carState.rot) * offsetDist;
