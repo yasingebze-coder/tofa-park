@@ -1,0 +1,8 @@
+Model Information:
+* title:	Tofaş slx
+* source:	https://sketchfab.com/3d-models/tofas-slx-96b1791f9f8f46a08bb4dc2b85960278
+* author:	x660x (https://sketchfab.com/x660x)
+
+Model License:
+* license type:	SKETCHFAB Standard (https://sketchfab.com/licenses)
+* requirements:	Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works
