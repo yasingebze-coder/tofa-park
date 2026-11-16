@@ -395,7 +395,7 @@
             smokeParticles.push({ mesh: p, life: 1.0 });
         }
 
-        // --- GERÇEK 3D MODEL YÜKLEYİCİ (tofas/scene.gltf) ---
+        // --- GERÇEK 3D MODEL YÜKLEYİCİ (scene.gltf) ---
         const carGroup = new THREE.Group();
         scene.add(carGroup);
 
@@ -461,9 +461,9 @@
         let fallbackMesh = buildFallbackTofas();
         carGroup.add(fallbackMesh);
 
-        // GitHub'daki tofas/scene.gltf dosyasını yükle
+        // GitHub'daki scene.gltf dosyasını yükle
         gltfLoader.load(
-            'tofas/scene.gltf',
+            'scene.gltf',
             (gltf) => {
                 carGroup.remove(fallbackMesh);
                 const tofasModel = normalizeModel(gltf.scene, 4.3);
@@ -472,7 +472,7 @@
             },
             undefined,
             () => {
-                document.getElementById('hintText').innerText = levels[currentLevel].hint + " (tofas/scene.gltf bekleniyor)";
+                document.getElementById('hintText').innerText = levels[currentLevel].hint + " (scene.gltf bekleniyor)";
             }
         );
 
