@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Tofaş Park 3D">
+    <title>Tofaş Park 3D</title>
+    <style>
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; touch-action: none; }
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background: #1a1a2e;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        #gameCanvas { display: block; width: 100%; height: 100%; }
+
+        /* Üst Bilgi Paneli */
+        .hud-top {
+            position: absolute; top: 15px; left: 15px; right: 15px;
+            display: flex; justify-content: space-between; align-items: flex-start;
+            pointer-events: none; z-index: 10;
+        }
+        .panel {
+            background: rgba(15, 20, 30, 0.78);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: white; padding: 10px 16px; border-radius: 12px;
+            pointer-events: auto;
+        }
+        .level-title { font-size: 16px; font-weight: 800; color: #f59e0b; }
+        .sub-info { font-size: 12px; color: #cbd5e1; margin-top: 2px; }
+        .top-btns { display: flex; gap: 8px; }
+        .btn-ui {
+            background: rgba(255, 255, 255, 0.12); color: white;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            padding: 8px 12px; border-radius: 10px; font-weight: 700; font-size: 13px;
+            cursor: pointer;
+        }
+        .btn-ui:active { background: rgba(255, 255, 255, 0.25); }
+
+        /* Park İlerleme Çubuğu */
+        .park-progress-wrap {
+            position: absolute; top: 75px; left: 50%; transform: translateX(-50%);
+            width: 220px; background: rgba(0,0,0,0.6); border-radius: 20px;
+            padding: 4px; display: none; border: 1px solid #10b981; z-index: 10;
+        }
+        .park-progress-bar {
+            height: 10px; width: 0%; background: #10b981; border-radius: 16px;
+            transition: width 0.1s linear;
+        }
+        .park-progress-text {
+            text-align: center; color: #10b981; font-size: 11px; font-weight: 800;
+            margin-top: 3px; text-shadow: 0 1px 2px black;
+        }
+
+        /* Dokunmatik Kontroller */
+        .controls-left {
+            position: absolute; bottom: 25px; left: 20px;
+            display: flex; gap: 12px; z-index: 10;
+        }
+        .controls-right {
+            position: absolute; bottom: 25px; right: 20px;
+            display: flex; gap: 12px; align-items: flex-end; z-index: 10;
+        }
+        .ctrl-btn {
+            width: 68px; height: 68px; border-radius: 50%;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(6px);
+            border: 2px solid rgba(255, 255, 255, 0.35);
+            color: white; font-size: 24px; font-weight: 800;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .ctrl-btn:active, .ctrl-btn.active {
+            background: rgba(245, 158, 11, 0.65); border-color: #f59e0b; transform: scale(0.94);
+        }
+        .pedal {
+            width: 62px; height: 88px; border-radius: 14px;
+            font-size: 13px; flex-direction: column; gap: 4px;
+        }
+        .pedal-brake { border-color: rgba(239, 68, 68, 0.6); }
+        .pedal-brake.active { background: rgba(239, 68, 68, 0.7); border-color: #ef4444; }
+        .pedal-gas { border-color: rgba(16, 185, 129, 0.6); height: 98px; }
+        .pedal-gas.active { background: rgba(16, 185, 129, 0.7); border-color: #10b981; }
+
+        .gear-btn {
+            width: 52px; height: 52px; border-radius: 12px;
+            font-size: 18px; font-weight: 900;
+            background: rgba(15, 23, 42, 0.85); border: 2px solid #38bdf8; color: #38bdf8;
+        }
+        .gear-btn.reverse { border-color: #ef4444; color: #ef4444; }
+
+        /* İmza */
+        .signature {
+            position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+            font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.45);
+            pointer-events: none; z-index: 5;
+        }
+
+        /* Oyun Sonu / Bölüm Geçme Ekranı */
+        .modal {
+            position: absolute; inset: 0; background: rgba(10, 15, 25, 0.85);
+            backdrop-filter: blur(8px); display: none; flex-direction: column;
+            align-items: center; justify-content: center; color: white; z-index: 30;
+            text-align: center; padding: 20px;
+        }
+        .modal h2 { font-size: 32px; margin: 0 0 8px 0; }
+        .modal p { color: #cbd5e1; margin: 0 0 20px 0; font-size: 15px; }
+        .modal-btn {
+            background: #f59e0b; color: #0f172a; border: none;
+            padding: 14px 28px; border-radius: 12px; font-size: 16px; font-weight: 800;
+            cursor: pointer;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div class="hud-top">
+        <div class="panel">
+            <div class="level-title" id="levelText">BÖLÜM 1 / 5</div>
+            <div class="sub-info" id="hintText">Aracı yeşil alana düz park et</div>
+        </div>
+        <div class="top-btns">
+            <button class="btn-ui" onclick="toggleCamera()">Kamera</button>
+            <button class="btn-ui" onclick="resetLevel()">Sıfırla</button>
+        </div>
+    </div>
+
+    <div class="park-progress-wrap" id="parkWrap">
+        <div class="park-progress-bar" id="parkBar"></div>
+        <div class="park-progress-text">PARK EDİLİYOR... SABİT DUR</div>
+    </div>
+
+    <div class="controls-left">
+        <div class="ctrl-btn" id="btnLeft">◀</div>
+        <div class="ctrl-btn" id="btnRight">▶</div>
+    </div>
+
+    <div class="controls-right">
+        <div class="ctrl-btn gear-btn" id="btnGear" onclick="toggleGear()">D</div>
+        <div class="ctrl-btn pedal pedal-brake" id="btnBrake">FREN</div>
+        <div class="ctrl-btn pedal pedal-gas" id="btnGas">GAZ</div>
+    </div>
+
+    <div class="signature">Geliştirici: Yasin Karakaş</div>
+
+    <div class="modal" id="modal">
+        <h2 id="modalTitle">ÇARPTIN!</h2>
+        <p id="modalDesc">Dubalara veya diğer araçlara dokunmadan park etmelisin.</p>
+        <button class="modal-btn" id="modalBtn" onclick="handleModalAction()">Tekrar Dene</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        // --- SAHNE VE RENDERER KURULUMU ---
+        const canvas = document.getElementById('gameCanvas');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1e293b);
+        scene.fog = new THREE.Fog(0x1e293b, 35, 95);
+
+        const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 150);
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        // Işıklar
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x334155, 0.75);
+        scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+        dirLight.position.set(20, 35, 20);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        dirLight.shadow.camera.near = 5;
+        dirLight.shadow.camera.far = 90;
+        const d = 30;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        scene.add(dirLight);
+
+        // Zemin (Asfalt Otopark)
+        const groundGeo = new THREE.PlaneGeometry(120, 120);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x27272a, roughness: 0.85 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Otopark Çizgileri
+        const gridHelper = new THREE.GridHelper(100, 50, 0x3f3f46, 0x3f3f46);
+        gridHelper.position.y = 0.01;
+        scene.add(gridHelper);
+
+        // --- 3D TOFAŞ ŞAHİN MODELİ OLUŞTURMA ---
+        const carGroup = new THREE.Group();
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.25, metalness: 0.1 }); // Klasik Beyaz
+        const glassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.1, metalness: 0.8 }); // Siyah Cam Film
+        const blackTrimMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.7 }); // Tampon ve Çıtalar
+        const chromeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.9, roughness: 0.2 }); // CMS Jant / Panjur
+
+        // Alt Gövde (Köşeli klasik Şahin kasa)
+        const chassis = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.62, 4.25), bodyMat);
+        chassis.position.y = 0.52;
+        chassis.castShadow = true;
+        carGroup.add(chassis);
+
+        // Üst Kabin
+        const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.56, 2.2), bodyMat);
+        cabin.position.set(0, 1.08, -0.15);
+        cabin.castShadow = true;
+        carGroup.add(cabin);
+
+        // Camlar (Ön, Arka ve Yanlar)
+        const frontGlass = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.48), glassMat);
+        frontGlass.position.set(0, 1.08, 0.96);
+        frontGlass.rotation.x = -0.22;
+        carGroup.add(frontGlass);
+
+        const rearGlass = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.46), glassMat);
+        rearGlass.position.set(0, 1.08, -1.26);
+        rearGlass.rotation.y = Math.PI;
+        rearGlass.rotation.x = -0.22;
+        carGroup.add(rearGlass);
+
+        const sideGlass = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.44, 1.95), glassMat);
+        sideGlass.position.set(0, 1.08, -0.15);
+        carGroup.add(sideGlass);
+
+        // Ön ve Arka Siyah Tamponlar
+        const frontBumper = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.24, 0.25), blackTrimMat);
+        frontBumper.position.set(0, 0.36, 2.15);
+        carGroup.add(frontBumper);
+
+        const rearBumper = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.24, 0.25), blackTrimMat);
+        rearBumper.position.set(0, 0.36, -2.15);
+        carGroup.add(rearBumper);
+
+        // Ön Panjur ve Farlar
+        const grille = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.22, 0.05), blackTrimMat);
+        grille.position.set(0, 0.62, 2.13);
+        carGroup.add(grille);
+
+        const headLightMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+        const hlLeft = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.2, 0.06), headLightMat);
+        hlLeft.position.set(-0.66, 0.62, 2.13);
+        const hlRight = hlLeft.clone();
+        hlRight.position.x = 0.66;
+        carGroup.add(hlLeft, hlRight);
+
+        // Arka Stoplar (Fren ve Geri Vites)
+        const tailMatLeft = new THREE.MeshBasicMaterial({ color: 0xdc2626 });
+        const tailMatRight = new THREE.MeshBasicMaterial({ color: 0xdc2626 });
+        const tlLeft = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.2, 0.06), tailMatLeft);
+        tlLeft.position.set(-0.62, 0.64, -2.13);
+        const tlRight = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.2, 0.06), tailMatRight);
+        tlRight.position.set(0.62, 0.64, -2.13);
+        carGroup.add(tlLeft, tlRight);
+
+        // 4 Tekerlek (CMS Jant Görünümlü - Basık Ayar)
+        const wheels = [];
+        const frontWheelPivots = [];
+        function createWheel(x, z, isFront) {
+            const pivot = new THREE.Group();
+            pivot.position.set(x, 0.32, z);
+
+            const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.24, 20), blackTrimMat);
+            tire.rotation.z = Math.PI / 2;
+            tire.castShadow = true;
+
+            const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.25, 12), chromeMat);
+            rim.rotation.z = Math.PI / 2;
+
+            const wheelMesh = new THREE.Group();
+            wheelMesh.add(tire, rim);
+            pivot.add(wheelMesh);
+            carGroup.add(pivot);
+
+            wheels.push(wheelMesh);
+            if (isFront) frontWheelPivots.push(pivot);
+        }
+
+        createWheel(-0.92, 1.32, true);
+        createWheel(0.92, 1.32, true);
+        createWheel(-0.92, -1.32, false);
+        createWheel(0.92, -1.32, false);
+
+        scene.add(carGroup);
+
+        // --- PARK ALANI VE ENGELLER ---
+        const targetZone = new THREE.Group();
+        const zoneFloor = new THREE.Mesh(
+            new THREE.PlaneGeometry(2.7, 5.0),
+            new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.28, side: THREE.DoubleSide })
+        );
+        zoneFloor.rotation.x = -Math.PI / 2;
+        zoneFloor.position.y = 0.03;
+        targetZone.add(zoneFloor);
+
+        const zoneBorder = new THREE.LineSegments(
+            new THREE.EdgesGeometry(new THREE.BoxGeometry(2.7, 0.05, 5.0)),
+            new THREE.LineBasicMaterial({ color: 0x10b981 })
+        );
+        zoneBorder.position.y = 0.04;
+        targetZone.add(zoneBorder);
+        scene.add(targetZone);
+
+        let obstacles = []; // Çarpışma kutuları {x, z, w, d, mesh}
+
+        function clearObstacles() {
+            obstacles.forEach(o => scene.remove(o.mesh));
+            obstacles = [];
+        }
+
+        function addCone(x, z) {
+            const cone = new THREE.Mesh(
+                new THREE.ConeGeometry(0.25, 0.75, 12),
+                new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.4 })
+            );
+            cone.position.set(x, 0.375, z);
+            cone.castShadow = true;
+            scene.add(cone);
+            obstacles.push({ x, z, w: 0.45, d: 0.45, mesh: cone });
+        }
+
+        function addBarrier(x, z, w, d) {
+            const barrier = new THREE.Mesh(
+                new THREE.BoxGeometry(w, 0.9, d),
+                new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.7 })
+            );
+            barrier.position.set(x, 0.45, z);
+            barrier.castShadow = true;
+            scene.add(barrier);
+            obstacles.push({ x, z, w, d, mesh: barrier });
+        }
+
+        function addParkedCar(x, z, rotY, colorHex) {
+            const npc = new THREE.Group();
+            const b = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.65, 4.2), new THREE.MeshStandardMaterial({ color: colorHex }));
+            b.position.y = 0.52;
+            b.castShadow = true;
+            const c = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.55, 2.1), glassMat);
+            c.position.set(0, 1.08, -0.1);
+            npc.add(b, c);
+            npc.position.set(x, 0, z);
+            npc.rotation.y = rotY;
+            scene.add(npc);
+
+            const isRotated = Math.abs(Math.sin(rotY)) > 0.7;
+            obstacles.push({
+                x, z,
+                w: isRotated ? 4.2 : 1.85,
+                d: isRotated ? 1.85 : 4.2,
+                mesh: npc
+            });
+        }
+
+        // --- 5 BÖLÜM TASARIMI ---
+        const levels = [
+            {
+                hint: "Düz ilerle ve yeşil alana park et",
+                start: { x: 0, z: -10, rot: 0 },
+                target: { x: 0, z: 6, rot: 0 },
+                setup: () => {
+                    addCone(-1.7, 3.5); addCone(1.7, 3.5);
+                    addCone(-1.7, 8.5); addCone(1.7, 8.5);
+                    addBarrier(0, 10, 6, 0.5);
+                }
+            },
+            {
+                hint: "Sağa dönüp iki aracın arasına gir",
+                start: { x: -8, z: -8, rot: 0 },
+                target: { x: 6, z: 2, rot: Math.PI / 2 },
+                setup: () => {
+                    addParkedCar(6, -1.2, Math.PI / 2, 0xdc2626);
+                    addParkedCar(6, 5.2, Math.PI / 2, 0x2563eb);
+                    addBarrier(9.5, 2, 0.5, 12);
+                    addCone(-2, 2);
+                }
+            },
+            {
+                hint: "Geri vites (R) ile paralel park yap",
+                start: { x: 3.5, z: -4, rot: 0 },
+                target: { x: 7, z: 3, rot: 0 },
+                setup: () => {
+                    addParkedCar(7, -2.5, 0, 0xeab308);
+                    addParkedCar(7, 8.5, 0, 0x475569);
+                    addBarrier(9.2, 3, 0.5, 18);
+                }
+            },
+            {
+                hint: "Dar koridordan L dönüşü ile geri park et",
+                start: { x: -8, z: 6, rot: Math.PI / 2 },
+                target: { x: 4, z: -6, rot: 0 },
+                setup: () => {
+                    addBarrier(-2, 1.5, 14, 0.5);
+                    addBarrier(1.2, -5.5, 0.5, 8);
+                    addBarrier(6.8, -5.5, 0.5, 8);
+                    addBarrier(4, -9.5, 6, 0.5);
+                    addCone(8, 6);
+                }
+            },
+            {
+                hint: "Usta Şoför: Dar alana ters park et",
+                start: { x: -9, z: -9, rot: 0 },
+                target: { x: 8, z: 7, rot: Math.PI },
+                setup: () => {
+                    addParkedCar(4.8, 7, 0, 0x9333ea);
+                    addParkedCar(11.2, 7, 0, 0x059669);
+                    addBarrier(0, -1, 12, 0.5);
+                    addCone(-4, 5); addCone(1, 3);
+                    addBarrier(8, 10.5, 10, 0.5);
+                }
+            }
+        ];
+
+        // --- OYUN DURUMU VE FİZİK DEĞİŞKENLERİ ---
+        let currentLevel = 0;
+        let carState = { x: 0, z: 0, rot: 0, speed: 0, steer: 0 };
+        let gear = 1; // 1: D (İleri), -1: R (Geri)
+        let inputs = { left: false, right: false, gas: false, brake: false };
+        let cameraMode = 0; // 0: Takip, 1: Üstten, 2: Kaput Üstü
+        let parkTimer = 0;
+        let isGamePaused = false;
+        let modalActionType = 'RETRY';
+
+        function loadLevel(idx) {
+            currentLevel = idx;
+            const lvl = levels[idx];
+            clearObstacles();
+            lvl.setup();
+
+            carState = { x: lvl.start.x, z: lvl.start.z, rot: lvl.start.rot, speed: 0, steer: 0 };
+            gear = 1;
+            updateGearUI();
+            parkTimer = 0;
+            isGamePaused = false;
+            document.getElementById('parkWrap').style.display = 'none';
+            document.getElementById('modal').style.display = 'none';
+
+            targetZone.position.set(lvl.target.x, 0, lvl.target.z);
+            targetZone.rotation.y = lvl.target.rot;
+
+            document.getElementById('levelText').innerText = `BÖLÜM ${idx + 1} / ${levels.length}`;
+            document.getElementById('hintText').innerText = lvl.hint;
+        }
+
+        function resetLevel() {
+            loadLevel(currentLevel);
+        }
+
+        function toggleGear() {
+            gear = gear === 1 ? -1 : 1;
+            updateGearUI();
+        }
+
+        function updateGearUI() {
+            const btn = document.getElementById('btnGear');
+            if (gear === 1) {
+                btn.innerText = 'D';
+                btn.classList.remove('reverse');
+                tailMatRight.color.setHex(0xdc2626);
+            } else {
+                btn.innerText = 'R';
+                btn.classList.add('reverse');
+                tailMatRight.color.setHex(0xffffff); // Geri vites beyaz ışığı
+            }
+        }
+
+        function toggleCamera() {
+            cameraMode = (cameraMode + 1) % 3;
+        }
+
+        // --- DOKUNMATİK VE KLAVYE KONTROLLERİ ---
+        function bindBtn(id, key) {
+            const el = document.getElementById(id);
+            const start = (e) => { e.preventDefault(); inputs[key] = true; el.classList.add('active'); };
+            const end = (e) => { e.preventDefault(); inputs[key] = false; el.classList.remove('active'); };
+            el.addEventListener('touchstart', start);
+            el.addEventListener('touchend', end);
+            el.addEventListener('mousedown', start);
+            el.addEventListener('mouseup', end);
+            el.addEventListener('mouseleave', end);
+        }
+
+        bindBtn('btnLeft', 'left');
+        bindBtn('btnRight', 'right');
+        bindBtn('btnGas', 'gas');
+        bindBtn('btnBrake', 'brake');
+
+        window.addEventListener('keydown', e => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') inputs.left = true;
+            if (e.key === 'ArrowRight' || e.key === 'd') inputs.right = true;
+            if (e.key === 'ArrowUp' || e.key === 'w') inputs.gas = true;
+            if (e.key === 'ArrowDown' || e.key === 's') inputs.brake = true;
+            if (e.key === 'r' || e.key === 'R') toggleGear();
+            if (e.key === 'c' || e.key === 'C') toggleCamera();
+        });
+        window.addEventListener('keyup', e => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') inputs.left = false;
+            if (e.key === 'ArrowRight' || e.key === 'd') inputs.right = false;
+            if (e.key === 'ArrowUp' || e.key === 'w') inputs.gas = false;
+            if (e.key === 'ArrowDown' || e.key === 's') inputs.brake = false;
+        });
+
+        // --- ÇARPIŞMA VE PARK KONTROLÜ ---
+        function checkCollisions() {
+            // Aracın 4 köşesini kontrol et
+            const halfW = 0.85;
+            const halfL = 2.0;
+            const cos = Math.cos(carState.rot);
+            const sin = Math.sin(carState.rot);
+
+            const corners = [
+                { x: carState.x + halfW * cos + halfL * sin, z: carState.z - halfW * sin + halfL * cos },
+                { x: carState.x - halfW * cos + halfL * sin, z: carState.z + halfW * sin + halfL * cos },
+                { x: carState.x + halfW * cos - halfL * sin, z: carState.z - halfW * sin - halfL * cos },
+                { x: carState.x - halfW * cos - halfL * sin, z: carState.z + halfW * sin - halfL * cos }
+            ];
+
+            for (let obs of obstacles) {
+                const minX = obs.x - obs.w / 2;
+                const maxX = obs.x + obs.w / 2;
+                const minZ = obs.z - obs.d / 2;
+                const maxZ = obs.z + obs.d / 2;
+
+                for (let pt of corners) {
+                    if (pt.x > minX && pt.x < maxX && pt.z > minZ && pt.z < maxZ) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function showModal(title, desc, btnText, actionType) {
+            isGamePaused = true;
+            modalActionType = actionType;
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalDesc').innerText = desc;
+            document.getElementById('modalBtn').innerText = btnText;
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        function handleModalAction() {
+            if (modalActionType === 'NEXT') {
+                const next = (currentLevel + 1) % levels.length;
+                loadLevel(next);
+            } else {
+                resetLevel();
+            }
+        }
+
+        // --- ANA OYUN DÖNGÜSÜ ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.05);
+
+            if (!isGamePaused) {
+                // Direksiyon açısı
+                const maxSteer = 0.52;
+                if (inputs.left) carState.steer = Math.min(carState.steer + 2.8 * dt, maxSteer);
+                else if (inputs.right) carState.steer = Math.max(carState.steer - 2.8 * dt, -maxSteer);
+                else carState.steer *= 0.82;
+
+                // Gaz ve Fren
+                const maxSpeed = gear === 1 ? 11 : 6.5;
+                if (inputs.gas) {
+                    carState.speed += gear * 9.5 * dt;
+                    if (gear === 1 && carState.speed > maxSpeed) carState.speed = maxSpeed;
+                    if (gear === -1 && carState.speed < -maxSpeed) carState.speed = -maxSpeed;
+                } else {
+                    carState.speed *= 0.94; // Doğal sürtünme
+                }
+
+                if (inputs.brake) {
+                    carState.speed *= 0.82;
+                    tailMatLeft.color.setHex(0xff0000);
+                } else {
+                    tailMatLeft.color.setHex(0x991b1b);
+                }
+
+                if (Math.abs(carState.speed) < 0.05) carState.speed = 0;
+
+                // Araç Kinematik Hareketi (Ackermann benzeri dönüş)
+                if (carState.speed !== 0) {
+                    const wheelBase = 2.65;
+                    const angularVel = (carState.speed / wheelBase) * Math.tan(carState.steer);
+                    carState.rot += angularVel * dt;
+                    carState.x += Math.sin(carState.rot) * carState.speed * dt;
+                    carState.z += Math.cos(carState.rot) * carState.speed * dt;
+                }
+
+                // 3D Model Güncelleme
+                carGroup.position.set(carState.x, 0, carState.z);
+                carGroup.rotation.y = carState.rot;
+
+                frontWheelPivots.forEach(p => p.rotation.y = carState.steer);
+                wheels.forEach(w => w.rotation.x += carState.speed * dt * 3);
+
+                // Çarpışma Kontrolü
+                if (checkCollisions()) {
+                    showModal("ÇARPTIN!", "Engellere dokunmadan tekrar dene.", "Tekrar Dene", "RETRY");
+                }
+
+                // Park Başarı Kontrolü
+                const lvl = levels[currentLevel];
+                const dist = Math.hypot(carState.x - lvl.target.x, carState.z - lvl.target.z);
+                let angleDiff = Math.abs((carState.rot - lvl.target.rot) % (Math.PI * 2));
+                if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
+
+                if (dist < 0.85 && angleDiff < 0.22 && Math.abs(carState.speed) < 0.2) {
+                    parkTimer += dt;
+                    document.getElementById('parkWrap').style.display = 'block';
+                    document.getElementById('parkBar').style.width = `${Math.min((parkTimer / 1.5) * 100, 100)}%`;
+                    zoneFloor.material.color.setHex(0x38bdf8);
+
+                    if (parkTimer >= 1.5) {
+                        const isLast = currentLevel === levels.length - 1;
+                        showModal(
+                            isLast ? "TÜM BÖLÜMLER BİTTİ!" : "MÜKEMMEL PARK!",
+                            isLast ? "Tofaş ile tüm parkurları başarıyla tamamladın!" : `Bölüm ${currentLevel + 1} tamamlandı.`,
+                            isLast ? "Baştan Oyna" : "Sonraki Bölüm",
+                            "NEXT"
+                        );
+                    }
+                } else {
+                    parkTimer = 0;
+                    document.getElementById('parkWrap').style.display = 'none';
+                    zoneFloor.material.color.setHex(0x10b981);
+                }
+            }
+
+            // Kamera Takibi
+            if (cameraMode === 0) {
+                // Dinamik Takip Kamerası
+                const offsetDist = gear === 1 ? -7.5 : 7.5;
+                const targetCamX = carState.x + Math.sin(carState.rot) * offsetDist;
+                const targetCamZ = carState.z + Math.cos(carState.rot) * offsetDist;
+                camera.position.lerp(new THREE.Vector3(targetCamX, 4.8, targetCamZ), 0.1);
+                camera.lookAt(carState.x, 0.8, carState.z);
+            } else if (cameraMode === 1) {
+                // Kuş Bakışı (Park hizası için)
+                camera.position.lerp(new THREE.Vector3(carState.x, 14, carState.z - 2), 0.15);
+                camera.lookAt(carState.x, 0, carState.z);
+            } else {
+                // Kaput Üstü Kamera
+                const hoodX = carState.x + Math.sin(carState.rot) * 0.6;
+                const hoodZ = carState.z + Math.cos(carState.rot) * 0.6;
+                camera.position.set(hoodX, 1.45, hoodZ);
+                camera.lookAt(
+                    carState.x + Math.sin(carState.rot) * 10,
+                    1.1,
+                    carState.z + Math.cos(carState.rot) * 10
+                );
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        loadLevel(0);
+        animate();
+    </script>
+</body>
+</html>
